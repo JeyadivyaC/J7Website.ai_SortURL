@@ -1,0 +1,70 @@
+{
+  "info": {
+    "name": "J7Website Short URL Service",
+    "description": "Create short URLs, redirect through them, and check click stats. Switch environments by changing the `baseUrl` variable (collection-level, or override in a Postman Environment).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3003", "type": "string" },
+    { "key": "code", "value": "", "type": "string", "description": "Set this after running 'Create short URL' - copy the 'code' from its response." }
+  ],
+  "item": [
+    {
+      "name": "Health check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+      }
+    },
+    {
+      "name": "Create short URL",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"destination\": \"https://example.com/some/long/link\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/short-url", "host": ["{{baseUrl}}"], "path": ["short-url"] }
+      }
+    },
+    {
+      "name": "Create short URLs in bulk",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [\n    { \"destination\": \"https://example.com/review?patient=1\", \"createdBy\": \"patient:1\" },\n    { \"destination\": \"https://example.com/review?patient=2\", \"createdBy\": \"patient:2\" }\n  ]\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/short-url/bulk", "host": ["{{baseUrl}}"], "path": ["short-url", "bulk"] }
+      }
+    },
+    {
+      "name": "Get click stats for a short URL",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/short-url/{{code}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["short-url", "{{code}}"]
+        }
+      }
+    },
+    {
+      "name": "Redirect (visit a short URL)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/r/{{code}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["r", "{{code}}"]
+        },
+        "description": "Postman follows the 302 by default (Settings > 'Automatically follow redirects'). Turn that off if you just want to see the 302 + Location header instead of the final destination page."
+      }
+    }
+  ]
+}
