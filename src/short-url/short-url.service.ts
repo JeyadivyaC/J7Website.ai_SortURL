@@ -3,10 +3,12 @@ import { ConfigService } from '../config/config.service';
 import { RequestContext } from '../common/http/request-context';
 import { ShortCodeCollisionError } from '../common/errors/short-code-collision.error';
 import { ShortCodeGenerationError } from '../common/errors/short-code-generation.error';
+import { ShortUrlNotFoundError } from '../common/errors/short-url-not-found.error';
 import { parseClickMetadata } from './click-metadata';
 import { generateBase62Code } from './code-generator';
 import { ShortUrlBulkResponseDto } from './dto/short-url-bulk-response.dto';
 import { ShortUrlResponseDto } from './dto/short-url-response.dto';
+import { ShortUrlStatsResponseDto } from './dto/short-url-stats-response.dto';
 import { SHORT_URL_REPOSITORY, ShortUrl, ShortUrlRepository } from './short-url.repository';
 
 export interface BulkCreateItem {
@@ -92,6 +94,24 @@ export class ShortUrlService {
       codes.add(generateBase62Code());
     }
     return codes;
+  }
+
+  async getStats(code: string): Promise<ShortUrlStatsResponseDto> {
+    const shortUrl = await this.repository.findByCode(code);
+    if (!shortUrl) {
+      throw new ShortUrlNotFoundError(code);
+    }
+    return {
+      id: shortUrl.id,
+      code: shortUrl.code,
+      destination: shortUrl.destination,
+      shortUrl: `${this.config.baseUrl}/r/${shortUrl.code}`,
+      clickCount: shortUrl.clickCount,
+      createdAt: shortUrl.createdAt,
+      lastAccessedAt: shortUrl.lastAccessedAt,
+      expiresAt: shortUrl.expiresAt,
+      status: shortUrl.status,
+    };
   }
 
   async redirect(code: string, context: RequestContext): Promise<ShortUrl> {

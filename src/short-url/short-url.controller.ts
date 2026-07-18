@@ -8,6 +8,7 @@ import { CreateShortUrlDto } from './dto/create-short-url.dto';
 import { CreateShortUrlSchema } from './dto/create-short-url.schema';
 import { ShortUrlBulkResponseDto } from './dto/short-url-bulk-response.dto';
 import { ShortUrlResponseDto } from './dto/short-url-response.dto';
+import { ShortUrlStatsResponseDto } from './dto/short-url-stats-response.dto';
 import { ShortUrlService } from './short-url.service';
 
 @Controller()
@@ -26,6 +27,11 @@ export class ShortUrlController {
   @UsePipes(new ZodValidationPipe(CreateShortUrlBulkSchema))
   async createBulk(@Body() body: CreateShortUrlBulkDto): Promise<ShortUrlBulkResponseDto> {
     return this.shortUrlService.createBulk(body.items);
+  }
+
+  @Get('short-url/:code')
+  async getStats(@Param('code') code: string): Promise<ShortUrlStatsResponseDto> {
+    return this.shortUrlService.getStats(code);
   }
 
   @Get('r/:code')

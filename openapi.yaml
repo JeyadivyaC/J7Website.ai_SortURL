@@ -156,6 +156,45 @@ paths:
                 error: InternalError
                 message: Failed to generate a unique short code after 5 attempts
 
+  /short-url/{code}:
+    get:
+      tags: [Short URL]
+      summary: Get click stats and details for a short URL
+      operationId: getShortUrlStats
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+          example: Ab12Cd
+      responses:
+        '200':
+          description: Short URL details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortUrlStatsResponse'
+              example:
+                id: 3a9c1e4a-1234-4a1b-9abc-1234567890ab
+                code: Ab12Cd
+                destination: https://example.com/some/long/path?utm_source=sms
+                shortUrl: https://s.jseven.ai/r/Ab12Cd
+                clickCount: 5
+                createdAt: '2026-07-15T10:00:00.000Z'
+                lastAccessedAt: '2026-07-18T11:56:51.000Z'
+                expiresAt: null
+                status: ACTIVE
+        '404':
+          description: No short URL exists for this code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: NotFound
+                message: Short URL with code "Ab12Cd" was not found
+
   /r/{code}:
     get:
       tags: [Short URL]
@@ -224,6 +263,38 @@ components:
           type: string
           format: uri
           description: '`${BASE_URL}/r/{code}`'
+
+    ShortUrlStatsResponse:
+      type: object
+      required: [id, code, destination, shortUrl, clickCount, createdAt, lastAccessedAt, expiresAt, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        destination:
+          type: string
+          format: uri
+        shortUrl:
+          type: string
+          format: uri
+        clickCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        lastAccessedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [ACTIVE, EXPIRED, DISABLED]
 
     CreateShortUrlBulkRequest:
       type: object

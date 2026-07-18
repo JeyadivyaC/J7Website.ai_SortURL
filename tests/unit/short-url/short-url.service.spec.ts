@@ -171,6 +171,40 @@ describe('ShortUrlService', () => {
     });
   });
 
+  describe('getStats', () => {
+    it('returns the short URL details built from a found record', async () => {
+      const found = createShortUrl({
+        clickCount: 5,
+        lastAccessedAt: new Date('2026-07-18T11:56:51.000Z'),
+      });
+      const findByCode = jest.fn().mockResolvedValue(found);
+      const repository = createRepository({ findByCode });
+      const service = new ShortUrlService(repository, config);
+
+      const result = await service.getStats(found.code);
+
+      expect(findByCode).toHaveBeenCalledWith(found.code);
+      expect(result).toEqual({
+        id: found.id,
+        code: found.code,
+        destination: found.destination,
+        shortUrl: `https://api.example.com/r/${found.code}`,
+        clickCount: found.clickCount,
+        createdAt: found.createdAt,
+        lastAccessedAt: found.lastAccessedAt,
+        expiresAt: found.expiresAt,
+        status: found.status,
+      });
+    });
+
+    it('throws ShortUrlNotFoundError when the code does not exist', async () => {
+      const repository = createRepository({ findByCode: jest.fn().mockResolvedValue(null) });
+      const service = new ShortUrlService(repository, config);
+
+      await expect(service.getStats('missing')).rejects.toThrow(ShortUrlNotFoundError);
+    });
+  });
+
   describe('redirect', () => {
     it('parses click metadata from the request context and records the click', async () => {
       const found = createShortUrl({ clickCount: 5 });
