@@ -16,6 +16,8 @@ servers:
       Deployed (dev) - custom domain, fronts CloudFront. Requires the DNS
       CNAME (s.jseven.ai -> CloudFront distribution domain) to be set - see
       SETUP.md.
+  - url: https://fu58hr6q60.execute-api.ap-southeast-2.amazonaws.com/dev
+    description: Deployed (dev) - direct API Gateway, bypasses CloudFront/domain, useful for debugging.
 
 # No auth in Phase 1 - see docs/architecture.md. Explicit empty array (rather
 # than omitting `security`) documents that this is deliberate, not an
