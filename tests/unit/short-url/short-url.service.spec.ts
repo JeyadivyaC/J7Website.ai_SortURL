@@ -30,6 +30,7 @@ function createRepository(overrides: Partial<ShortUrlRepository> = {}): ShortUrl
     recordClick: jest.fn(),
     findExistingCodes: jest.fn().mockResolvedValue(new Set()),
     createMany: jest.fn(),
+    findClickLogs: jest.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -172,18 +173,35 @@ describe('ShortUrlService', () => {
   });
 
   describe('getStats', () => {
-    it('returns the short URL details built from a found record', async () => {
+    it('returns the short URL details plus its click log, built from a found record', async () => {
       const found = createShortUrl({
-        clickCount: 5,
+        clickCount: 1,
         lastAccessedAt: new Date('2026-07-18T11:56:51.000Z'),
       });
+      const clickLog = {
+        clickedAt: new Date('2026-07-18T11:56:51.000Z'),
+        ipAddress: '203.0.113.5',
+        userAgent: 'test-agent',
+        referer: '',
+        country: null,
+        region: null,
+        city: null,
+        deviceType: 'desktop',
+        browser: 'Chrome',
+        operatingSystem: 'Windows',
+        isBot: false,
+        responseStatus: 302,
+        redirectUrl: found.destination,
+      };
       const findByCode = jest.fn().mockResolvedValue(found);
-      const repository = createRepository({ findByCode });
+      const findClickLogs = jest.fn().mockResolvedValue([clickLog]);
+      const repository = createRepository({ findByCode, findClickLogs });
       const service = new ShortUrlService(repository, config);
 
       const result = await service.getStats(found.code);
 
       expect(findByCode).toHaveBeenCalledWith(found.code);
+      expect(findClickLogs).toHaveBeenCalledWith(found.code, 50);
       expect(result).toEqual({
         id: found.id,
         code: found.code,
@@ -194,14 +212,17 @@ describe('ShortUrlService', () => {
         lastAccessedAt: found.lastAccessedAt,
         expiresAt: found.expiresAt,
         status: found.status,
+        clicks: [clickLog],
       });
     });
 
-    it('throws ShortUrlNotFoundError when the code does not exist', async () => {
-      const repository = createRepository({ findByCode: jest.fn().mockResolvedValue(null) });
+    it('throws ShortUrlNotFoundError when the code does not exist, without querying click logs', async () => {
+      const findClickLogs = jest.fn();
+      const repository = createRepository({ findByCode: jest.fn().mockResolvedValue(null), findClickLogs });
       const service = new ShortUrlService(repository, config);
 
       await expect(service.getStats('missing')).rejects.toThrow(ShortUrlNotFoundError);
+      expect(findClickLogs).not.toHaveBeenCalled();
     });
   });
 

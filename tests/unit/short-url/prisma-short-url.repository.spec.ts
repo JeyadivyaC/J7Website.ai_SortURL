@@ -14,7 +14,7 @@ function prismaKnownError(code: string): Prisma.PrismaClientKnownRequestError {
 
 function createPrismaMock(
   shortUrlOverrides: Partial<Record<'create' | 'findUnique' | 'update' | 'findMany' | 'createMany', jest.Mock>> = {},
-  clickLogOverrides: Partial<Record<'create', jest.Mock>> = {},
+  clickLogOverrides: Partial<Record<'create' | 'findMany', jest.Mock>> = {},
 ) {
   const shortUrl = {
     create: jest.fn(),
@@ -26,6 +26,7 @@ function createPrismaMock(
   };
   const shortUrlClickLog = {
     create: jest.fn(),
+    findMany: jest.fn(),
     ...clickLogOverrides,
   };
   const tx = { shortUrl, shortUrlClickLog };
@@ -154,6 +155,25 @@ describe('PrismaShortUrlRepository', () => {
       const repository = new PrismaShortUrlRepository(prisma);
 
       await expect(repository.findExistingCodes(['abc123'])).resolves.toEqual(new Set());
+    });
+  });
+
+  describe('findClickLogs', () => {
+    it('queries by code, newest first, capped at the given limit', async () => {
+      const rows = [{ clickedAt: new Date(), ipAddress: '203.0.113.5' }];
+      const findMany = jest.fn().mockResolvedValue(rows);
+      const prisma = createPrismaMock({}, { findMany });
+      const repository = new PrismaShortUrlRepository(prisma);
+
+      const result = await repository.findClickLogs('abc123', 50);
+
+      expect(findMany).toHaveBeenCalledWith({
+        where: { code: 'abc123' },
+        orderBy: { clickedAt: 'desc' },
+        take: 50,
+        select: expect.objectContaining({ clickedAt: true, ipAddress: true, redirectUrl: true }),
+      });
+      expect(result).toBe(rows);
     });
   });
 

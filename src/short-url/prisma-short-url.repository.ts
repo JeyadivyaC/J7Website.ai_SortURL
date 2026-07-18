@@ -6,6 +6,7 @@ import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import {
   BulkCreateShortUrlData,
   ClickLogInput,
+  ClickLogRecord,
   CreateShortUrlData,
   ShortUrl,
   ShortUrlRepository,
@@ -101,6 +102,29 @@ export class PrismaShortUrlRepository implements ShortUrlRepository {
       })),
     });
     return result.count;
+  }
+
+  async findClickLogs(code: string, limit: number): Promise<ClickLogRecord[]> {
+    return this.prisma.shortUrlClickLog.findMany({
+      where: { code },
+      orderBy: { clickedAt: 'desc' },
+      take: limit,
+      select: {
+        clickedAt: true,
+        ipAddress: true,
+        userAgent: true,
+        referer: true,
+        country: true,
+        region: true,
+        city: true,
+        deviceType: true,
+        browser: true,
+        operatingSystem: true,
+        isBot: true,
+        responseStatus: true,
+        redirectUrl: true,
+      },
+    });
   }
 
   private isPrismaError(error: unknown, code: string): boolean {

@@ -48,6 +48,25 @@ export interface ClickLogInput {
   requestId: string;
 }
 
+// One row per past click, as written by recordClick - see ClickLogInput for
+// what's captured at write time. redirectUrl is the resolved destination at
+// the time of that click (not necessarily today's destination).
+export interface ClickLogRecord {
+  clickedAt: Date;
+  ipAddress: string;
+  userAgent: string;
+  referer: string;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  deviceType: string | null;
+  browser: string | null;
+  operatingSystem: string | null;
+  isBot: boolean;
+  responseStatus: number;
+  redirectUrl: string;
+}
+
 // DI token for the repository interface, so ShortUrlService depends only on
 // this abstraction (never on Prisma directly) and can be unit tested with a
 // plain mock. See prisma-short-url.repository.ts for the concrete adapter.
@@ -73,4 +92,6 @@ export interface ShortUrlRepository {
    * partial failure partway through a batch has no clean per-entry recovery.
    */
   createMany(entries: BulkCreateShortUrlData[]): Promise<number>;
+  /** Most recent clicks for `code` first, capped at `limit`. */
+  findClickLogs(code: string, limit: number): Promise<ClickLogRecord[]>;
 }

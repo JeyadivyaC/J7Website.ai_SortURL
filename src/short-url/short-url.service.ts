@@ -20,6 +20,10 @@ export interface BulkCreateItem {
 // bound math justifying 6-char Base62 codes + this retry count).
 const MAX_CODE_GENERATION_ATTEMPTS = 5;
 
+// Caps the click history returned by getStats - a heavily-clicked short URL
+// could otherwise return an unbounded number of rows in one response.
+const CLICK_LOG_LIMIT = 50;
+
 @Injectable()
 export class ShortUrlService {
   constructor(
@@ -101,6 +105,7 @@ export class ShortUrlService {
     if (!shortUrl) {
       throw new ShortUrlNotFoundError(code);
     }
+    const clicks = await this.repository.findClickLogs(code, CLICK_LOG_LIMIT);
     return {
       id: shortUrl.id,
       code: shortUrl.code,
@@ -111,6 +116,7 @@ export class ShortUrlService {
       lastAccessedAt: shortUrl.lastAccessedAt,
       expiresAt: shortUrl.expiresAt,
       status: shortUrl.status,
+      clicks,
     };
   }
 
