@@ -31,24 +31,21 @@ s3_prefix = "j7website-short-url"
 region = "ap-southeast-2"
 capabilities = "CAPABILITY_NAMED_IAM"
 confirm_changeset = true
-#
-# Custom domain (s.jseven.ai) is deliberately NOT set yet - ACM cert setup is
-# on hold for now. Deploying without DomainName/AcmCertificateArn (both left
-# unset) makes CloudFront serve its own "*.cloudfront.net" URL instead.
-# BaseUrl below is set to the API Gateway URL as a placeholder - after the
-# first deploy, grab the "CloudFrontUrl" stack output and put that here
-# instead (see README "Local development" / SETUP.md), then redeploy once to
-# pick it up. Once the ACM cert is ready, add DomainName + AcmCertificateArn
-# back in and redeploy again to attach the custom domain (see SETUP.md).
 parameter_overrides = [
   "Environment=dev",
   "SecretName=j7website/short-url/dev/db",
-  "BaseUrl=https://CHANGE_ME.execute-api.ap-southeast-2.amazonaws.com/dev",
+  "BaseUrl=https://s.jseven.ai",
   "LogRetentionDays=14",
   # This account's IAM grant only allows creating roles named "j7website-*",
   # carrying this account's permissions boundary - see infra/aws-bootstrap/.
   "FunctionRoleName=j7website-short-url-dev-role",
-  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-j7website-team"
+  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-j7website-team",
+  # Custom domain, already attached to the CloudFront distribution (verify
+  # this cert shows "Issued" in Certificate Manager, us-east-1, before
+  # relying on it). DNS CNAME for s.jseven.ai -> the CloudFront distribution
+  # domain (see stack output CloudFrontUrl) is managed outside this stack.
+  "DomainName=s.jseven.ai",
+  "AcmCertificateArn=arn:aws:acm:us-east-1:857475015624:certificate/ea751728-0df5-4cd6-92fb-fa56736026b6"
 ]
 
 # `sam deploy --config-env prod`

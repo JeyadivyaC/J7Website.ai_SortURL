@@ -12,7 +12,10 @@ servers:
       Local dev (npm run start:dev). Matches PORT=3003 in .env - edit this
       URL (and .env's PORT) together if your local port differs.
   - url: https://s.jseven.ai
-    description: Deployed (dev) - custom domain, fronts CloudFront. Not live yet - see samconfig.toml.
+    description: >-
+      Deployed (dev) - custom domain, fronts CloudFront. Requires the DNS
+      CNAME (s.jseven.ai -> CloudFront distribution domain) to be set - see
+      SETUP.md.
 
 # No auth in Phase 1 - see docs/architecture.md. Explicit empty array (rather
 # than omitting `security`) documents that this is deliberate, not an
