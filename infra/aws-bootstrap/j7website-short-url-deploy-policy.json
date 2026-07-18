@@ -104,7 +104,7 @@
         "iam:PassRole",
         "iam:UpdateAssumeRolePolicy"
       ],
-      "Resource": "arn:aws:iam::857475015624:role/devaJ-j7website-short-url-*"
+      "Resource": "arn:aws:iam::857475015624:role/j7website-short-url-*"
     },
     {
       "Sid": "GithubOidcProviderBootstrap",

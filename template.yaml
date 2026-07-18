@@ -56,7 +56,7 @@ Parameters:
       Optional override for the Lambda execution role's name. Defaults to
       "j7website-short-url-<Environment>-role". Override when the deploying
       principal's IAM policy requires a specific naming convention (e.g. a
-      constrained user that may only create roles matching "devaJ-*").
+      constrained user that may only create roles matching "j7website-*").
 
   PermissionsBoundaryArn:
     Type: String

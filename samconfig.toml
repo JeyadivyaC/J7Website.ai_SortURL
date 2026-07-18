@@ -45,10 +45,10 @@ parameter_overrides = [
   "SecretName=j7website/short-url/dev/db",
   "BaseUrl=https://CHANGE_ME.execute-api.ap-southeast-2.amazonaws.com/dev",
   "LogRetentionDays=14",
-  # devaJ's IAM grant only allows creating roles named "devaJ-*", carrying
-  # this account's permissions boundary - see infra/aws-bootstrap/.
-  "FunctionRoleName=devaJ-j7website-short-url-dev-role",
-  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-devaJ"
+  # This account's IAM grant only allows creating roles named "j7website-*",
+  # carrying this account's permissions boundary - see infra/aws-bootstrap/.
+  "FunctionRoleName=j7website-short-url-dev-role",
+  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-j7website-team"
 ]
 
 # `sam deploy --config-env prod`
@@ -65,6 +65,6 @@ parameter_overrides = [
   "SecretName=CHANGE_ME/j7website/short-url/prod/db",
   "BaseUrl=https://CHANGE_ME.execute-api.ap-southeast-2.amazonaws.com/prod",
   "LogRetentionDays=90",
-  "FunctionRoleName=devaJ-j7website-short-url-prod-role",
-  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-devaJ"
+  "FunctionRoleName=j7website-short-url-prod-role",
+  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-j7website-team"
 ]
