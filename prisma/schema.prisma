@@ -1,0 +1,96 @@
+// Prisma schema for the J7Website Short URL service.
+//
+// binaryTargets pairs with the Lambda deployment architecture (arm64,
+// Amazon Linux 2023 -> OpenSSL 3.0). "native" is kept so `prisma generate`
+// works on any developer machine for local dev; the arm64 target is what
+// actually ships inside the Lambda artifact. If the SAM template's
+// `Architectures` value ever changes, this list must change with it.
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+}
+
+// MongoDB (an existing external deployment, e.g. MongoDB Atlas - this stack
+// does not create it). Prisma's MongoDB connector has no schema migrations
+// (`prisma migrate` is SQL-only); `npx prisma db push` instead syncs this
+// schema's unique/secondary indexes onto the target database. See README
+// "Local development" / "Deployment".
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum ShortUrlStatus {
+  ACTIVE
+  EXPIRED
+  DISABLED
+}
+
+model ShortUrl {
+  // Kept as an application-generated UUID string (not the native Mongo
+  // ObjectId) mapped onto _id, so the public API's "id" field stays a UUID
+  // as specified, regardless of the underlying database.
+  id             String         @id @default(uuid()) @map("_id")
+  code           String         @unique
+  destination    String
+  clickCount     Int            @default(0) @map("click_count")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  lastAccessedAt DateTime?      @map("last_accessed_at")
+  expiresAt      DateTime?      @map("expires_at")
+  createdBy      String?        @map("created_by")
+  status         ShortUrlStatus @default(ACTIVE)
+
+  @@index([createdAt])
+  @@map("short_urls")
+}
+
+// Append-only audit trail: one row per redirect, never updated or deleted.
+// short_urls stays a fast-read aggregate (click_count/last_accessed_at);
+// this table is the source for all per-click analytics. Indexed on every
+// column a known query pattern (per-link history, time-range, code lookup,
+// request correlation) needs directly - see docs/architecture.md.
+model ShortUrlClickLog {
+  id     String @id @default(uuid()) @map("_id")
+  // Not a Prisma relation on purpose: relations would force a MongoDB
+  // reference/lookup even though every current and planned query filters by
+  // this scalar value directly (see the @@index below) - a plain string
+  // matches how this table is actually queried.
+  shortUrlId String @map("short_url_id")
+  code       String
+
+  clickedAt DateTime @default(now()) @map("clicked_at")
+
+  ipAddress String @map("ip_address")
+  userAgent String @map("user_agent")
+  referer   String
+  // request_path/query_string are logged from the incoming request; the
+  // resolved destination (post-lookup) is captured separately as redirectUrl.
+  httpMethod   String @map("http_method")
+  requestPath  String @map("request_path")
+  queryString  String @map("query_string")
+
+  // Geo-IP is stubbed for now (always null) - see docs/architecture.md.
+  // Nullable columns exist so a real resolver can be wired in later with no
+  // schema change.
+  country String?
+  region  String?
+  city    String?
+
+  deviceType      String? @map("device_type")
+  browser         String?
+  operatingSystem String? @map("operating_system")
+  isBot           Boolean @default(false) @map("is_bot")
+
+  responseStatus Int    @map("response_status")
+  redirectUrl    String @map("redirect_url")
+  requestId      String @map("request_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([shortUrlId])
+  @@index([clickedAt])
+  @@index([code])
+  @@index([requestId])
+  @@map("short_url_click_logs")
+}

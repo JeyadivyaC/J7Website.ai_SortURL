@@ -1,0 +1,92 @@
+name: Deploy Short URL Service
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (must match a [<env>.deploy.parameters] stanza in samconfig.toml)
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npx prisma generate
+      # No live database is involved here - ShortUrlService is unit tested
+      # against a mocked ShortUrlRepository (see tests/unit).
+      - run: npm test -- --coverage
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    # Required for aws-actions/configure-aws-credentials to assume an AWS IAM
+    # role via OpenID Connect - no long-lived AWS access keys are stored in
+    # GitHub, avoiding static-credential leakage/rotation risk.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      # Runs BEFORE `sam build` deliberately: the Makefile build below ends
+      # with `npm prune --omit=dev`, which removes the `prisma` CLI itself
+      # (a devDependency) from node_modules. Running this step after would
+      # leave `npx prisma` with nothing installed to run.
+      #
+      # Prisma's MongoDB connector has no schema migrations ("prisma migrate"
+      # is SQL-only) - `db push` instead syncs this schema's unique/secondary
+      # indexes onto the target database. Works directly from a GitHub-hosted
+      # runner for a publicly reachable deployment (e.g. MongoDB Atlas with
+      # IP allowlisting - allowlist GitHub's runner IP ranges, or 0.0.0.0/0
+      # scoped to this least-privilege DB user, per your provider's
+      # guidance). If your MongoDB is VPC-only instead, this step needs a
+      # self-hosted runner inside that VPC or an SSM port-forward, same as
+      # any other private-network dependency. DATABASE_URL here is a GitHub
+      # Environment secret kept in sync with the credentials in the Secrets
+      # Manager secret the Lambda itself resolves at runtime (see
+      # src/config/secrets.service.ts) - it is not read by the Lambda.
+      - name: Sync database indexes
+        run: npx prisma db push --accept-data-loss
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: sam build
+        run: sam build --config-env ${{ inputs.environment || 'dev' }}
+
+      - name: sam deploy
+        run: >
+          sam deploy --config-env ${{ inputs.environment || 'dev' }}
+          --no-confirm-changeset --no-fail-on-empty-changeset

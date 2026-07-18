@@ -1,0 +1,70 @@
+version = 0.1
+
+# Used only by a bare `sam deploy` with no --config-env. NOT inherited by
+# the dev/prod stanzas below - SAM CLI reads exactly one [<env>.deploy.parameters]
+# section per invocation and does not merge it with [default...]. Every
+# setting an environment needs (including resolve_s3/s3_prefix) must be
+# repeated in that environment's own stanza.
+[default.deploy.parameters]
+stack_name = "j7website-short-url"
+resolve_s3 = true
+s3_prefix = "j7website-short-url"
+region = "ap-southeast-2"
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = true
+disable_rollback = false
+image_repositories = []
+
+# `sam deploy --config-env dev`
+# Replace every CHANGE_ME below with real values before deploying — none of
+# these parameters have a real default, by design (see README "Deployment").
+# VpcSubnetIds/VpcSecurityGroupIds are intentionally omitted here - they
+# default to "" (no VPC attachment), which is correct for a publicly
+# reachable MongoDB deployment (e.g. Atlas with IP allowlisting). Only add
+# them if your MongoDB is reachable solely from inside a VPC, e.g.:
+#   "VpcSubnetIds=subnet-aaaa,subnet-bbbb",
+#   "VpcSecurityGroupIds=sg-cccc",
+[dev.deploy.parameters]
+stack_name = "j7website-short-url-dev"
+resolve_s3 = true
+s3_prefix = "j7website-short-url"
+region = "ap-southeast-2"
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = true
+#
+# Custom domain (s.jseven.ai) is deliberately NOT set yet - ACM cert setup is
+# on hold for now. Deploying without DomainName/AcmCertificateArn (both left
+# unset) makes CloudFront serve its own "*.cloudfront.net" URL instead.
+# BaseUrl below is set to the API Gateway URL as a placeholder - after the
+# first deploy, grab the "CloudFrontUrl" stack output and put that here
+# instead (see README "Local development" / SETUP.md), then redeploy once to
+# pick it up. Once the ACM cert is ready, add DomainName + AcmCertificateArn
+# back in and redeploy again to attach the custom domain (see SETUP.md).
+parameter_overrides = [
+  "Environment=dev",
+  "SecretName=j7website/short-url/dev/db",
+  "BaseUrl=https://CHANGE_ME.execute-api.ap-southeast-2.amazonaws.com/dev",
+  "LogRetentionDays=14",
+  # devaJ's IAM grant only allows creating roles named "devaJ-*", carrying
+  # this account's permissions boundary - see infra/aws-bootstrap/.
+  "FunctionRoleName=devaJ-j7website-short-url-dev-role",
+  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-devaJ"
+]
+
+# `sam deploy --config-env prod`
+[prod.deploy.parameters]
+stack_name = "j7website-short-url-prod"
+resolve_s3 = true
+s3_prefix = "j7website-short-url"
+region = "ap-southeast-2"
+capabilities = "CAPABILITY_NAMED_IAM"
+confirm_changeset = true
+disable_rollback = true
+parameter_overrides = [
+  "Environment=prod",
+  "SecretName=CHANGE_ME/j7website/short-url/prod/db",
+  "BaseUrl=https://CHANGE_ME.execute-api.ap-southeast-2.amazonaws.com/prod",
+  "LogRetentionDays=90",
+  "FunctionRoleName=devaJ-j7website-short-url-prod-role",
+  "PermissionsBoundaryArn=arn:aws:iam::857475015624:policy/boundary-devaJ"
+]

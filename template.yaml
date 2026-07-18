@@ -1,0 +1,379 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  J7Website Phase 1 - Short URL Service. A single NestJS Lambda behind API
+  Gateway handling POST /short-url, GET /r/{code}, and GET /health. Assumes an
+  existing, externally hosted MongoDB deployment (e.g. MongoDB Atlas);
+  connects to it via Secrets Manager. Does not create the database.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment name. Used in resource names and as the API Gateway stage name.
+
+  SecretName:
+    Type: String
+    Description: >-
+      Friendly name (NOT the full ARN) of the Secrets Manager secret holding
+      credentials for the existing MongoDB deployment. Expected JSON payload
+      shape: either {"connectionString": "mongodb+srv://..."} (required for
+      SRV-style hosts, e.g. Atlas) or {"host", "username", "password",
+      "dbname", "port" (optional)}.
+
+  BaseUrl:
+    Type: String
+    Description: >-
+      Public root URL of this API, with NO trailing "/r" (e.g. the ApiBaseUrl
+      output from a previous deploy of this same stack). Used to build the
+      "shortUrl" field in POST /short-url responses as "<BaseUrl value>/r/{code}".
+
+  VpcSubnetIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: >-
+      Optional. Only needed if the MongoDB deployment is reachable solely
+      from inside a VPC (e.g. a self-hosted replica set reached via VPC
+      peering). Leave both VPC parameters empty for a publicly reachable
+      deployment such as MongoDB Atlas with IP allowlisting - the default,
+      simplest setup, and the one this template assumes unless these are
+      set. Subnet IDs the Lambda's ENIs attach to when non-empty.
+
+  VpcSecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: Optional, paired with VpcSubnetIds above; ignored unless VpcSubnetIds is also set.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    Description: CloudWatch Logs retention period, in days, for the function's log group.
+
+  FunctionRoleName:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional override for the Lambda execution role's name. Defaults to
+      "j7website-short-url-<Environment>-role". Override when the deploying
+      principal's IAM policy requires a specific naming convention (e.g. a
+      constrained user that may only create roles matching "devaJ-*").
+
+  PermissionsBoundaryArn:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional. ARN of an IAM permissions boundary to attach to the Lambda
+      execution role. Only needed when the deploying principal's own IAM
+      policy requires every role it creates to carry a specific boundary
+      (a common privilege-escalation guardrail for constrained deploy
+      users). Leave empty for an unconstrained deploy principal.
+
+  DomainName:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional custom domain to front this environment's CloudFront
+      distribution (e.g. s.jseven.ai). Requires AcmCertificateArn to also
+      be set. Leave both empty to use CloudFront's own *.cloudfront.net
+      domain.
+
+  AcmCertificateArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ARN of an ACM certificate covering DomainName. Must be issued in
+      us-east-1 regardless of this stack's own region - a CloudFront
+      requirement, not a choice this template makes. Required when
+      DomainName is set.
+
+# Environment is a resource-naming/API-stage value (dev/staging/prod); the
+# app's own NODE_ENV enum (src/config/env.schema.ts) is the standard Node.js
+# set (development/test/production) - the two vocabularies don't match, so
+# this maps between them rather than passing Environment through directly.
+Mappings:
+  EnvironmentConfig:
+    dev:
+      NodeEnv: development
+    staging:
+      NodeEnv: production
+    prod:
+      NodeEnv: production
+
+Conditions:
+  HasVpcConfig: !Not [!Equals [!Select [0, !Ref VpcSubnetIds], '']]
+  HasCustomRoleName: !Not [!Equals [!Ref FunctionRoleName, '']]
+  HasPermissionsBoundary: !Not [!Equals [!Ref PermissionsBoundaryArn, '']]
+  HasCustomDomain: !Not [!Equals [!Ref DomainName, '']]
+
+Resources:
+  # Declared explicitly (with retention) so we don't end up with the
+  # never-expiring log group Lambda/SAM would otherwise create implicitly.
+  ShortUrlLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/j7website-short-url-${Environment}'
+      RetentionInDays: !Ref LogRetentionDays
+
+  ShortUrlFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !If
+        - HasCustomRoleName
+        - !Ref FunctionRoleName
+        - !Sub 'j7website-short-url-${Environment}-role'
+      PermissionsBoundary: !If
+        - HasPermissionsBoundary
+        - !Ref PermissionsBoundaryArn
+        - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      # ENI create/describe/delete permissions are only needed when this
+      # function is attached to a VPC (see HasVpcConfig) - omitted entirely
+      # otherwise, since an unattached Lambda has no ENIs to manage.
+      ManagedPolicyArns:
+        - !If
+          - HasVpcConfig
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+          - !Ref AWS::NoValue
+      Policies:
+        - PolicyName: ShortUrlLogging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt ShortUrlLogGroup.Arn
+        - PolicyName: ShortUrlSecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                # Secrets Manager appends a random 6-char suffix to every
+                # secret's full ARN, so a bare friendly name must be scoped
+                # with a trailing wildcard to match it.
+                Resource: !Sub 'arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}-*'
+
+  ShortUrlApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'j7website-short-url-${Environment}'
+      StageName: !Ref Environment
+      TracingEnabled: true
+      # REGIONAL, not the SAM default EDGE. EDGE endpoints already sit behind
+      # an AWS-managed CloudFront distribution you can't see or configure -
+      # putting ShortUrlDistribution (below) in front of an EDGE endpoint
+      # would mean two CDN hops for no benefit. REGIONAL + our own
+      # distribution is the standard pattern for fronting API Gateway with a
+      # CloudFront you actually control (custom domain, WAF, etc. later).
+      EndpointConfiguration:
+        Type: REGIONAL
+      # SAM auto-generates an OPTIONS method (MOCK integration, answered by
+      # API Gateway directly - never invokes the Lambda) on every path with
+      # these headers, so browser preflight requests succeed. The app's own
+      # app.enableCors() (main.ts/lambda.ts) handles the actual GET/POST
+      # responses - this only covers the preflight half of CORS.
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'"
+
+  ShortUrlFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      # Prisma's generated query engine is a native binary - bundlers like
+      # esbuild need it explicitly externalized/copied, which is a common
+      # footgun. A Makefile build (see Makefile in this directory) ships
+      # dist/ + the full production node_modules/ tree unbundled instead,
+      # trading a slightly larger artifact for a much simpler, more robust
+      # build.
+      BuildMethod: makefile
+    Properties:
+      FunctionName: !Sub 'j7website-short-url-${Environment}'
+      Description: J7Website Short URL Service (Phase 1) - create, redirect, health.
+      CodeUri: ./
+      Handler: dist/lambda.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - arm64
+      MemorySize: 512
+      Timeout: 15
+      Role: !GetAtt ShortUrlFunctionRole.Arn
+      VpcConfig: !If
+        - HasVpcConfig
+        - SubnetIds: !Ref VpcSubnetIds
+          SecurityGroupIds: !Ref VpcSecurityGroupIds
+        - !Ref AWS::NoValue
+      Environment:
+        Variables:
+          NODE_ENV: !FindInMap [EnvironmentConfig, !Ref Environment, NodeEnv]
+          BASE_URL: !Ref BaseUrl
+          SECRET_NAME: !Ref SecretName
+          # DATABASE_URL is intentionally NOT set here - in AWS, SecretsService
+          # always resolves the DB URL via SECRET_NAME (see src/config/secrets.service.ts).
+          # DATABASE_URL is a local-dev-only fallback.
+          #
+          # AWS_REGION is intentionally NOT set here either - it is a
+          # Lambda-reserved environment variable injected automatically by
+          # the runtime; CloudFormation rejects attempts to set it explicitly.
+      Events:
+        HealthCheck:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /health
+            Method: GET
+        CreateShortUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /short-url
+            Method: POST
+        CreateShortUrlBulk:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /short-url/bulk
+            Method: POST
+        RedirectShortUrl:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /r/{code}
+            Method: GET
+        GetOpenApiSpec:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /openapi.yaml
+            Method: GET
+        GetSwaggerUi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /swagger-ui.html
+            Method: GET
+
+  # Fronts the REGIONAL API Gateway endpoint above (see ShortUrlApi's
+  # EndpointConfiguration comment for why REGIONAL, not EDGE). Aliases/
+  # ViewerCertificate are conditional on DomainName - CloudFront's own
+  # *.cloudfront.net domain is used when it's left unset (e.g. prod, until
+  # it gets its own domain).
+  ShortUrlDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        HttpVersion: http2
+        Comment: !Sub 'J7Website Short URL (${Environment})'
+        Aliases: !If
+          - HasCustomDomain
+          - [!Ref DomainName]
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - HasCustomDomain
+          - AcmCertificateArn: !Ref AcmCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - !Ref AWS::NoValue
+        Origins:
+          - Id: ApiGatewayOrigin
+            DomainName: !Sub '${ShortUrlApi}.execute-api.${AWS::Region}.amazonaws.com'
+            OriginPath: !Sub '/${Environment}'
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        DefaultCacheBehavior:
+          TargetOriginId: ApiGatewayOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          # POST (create) and OPTIONS (CORS preflight) both need to reach
+          # the origin, not just GET/HEAD.
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # AWS managed "CachingDisabled" - GET /r/{code} increments
+          # click_count and writes an audit-log row on every request; a
+          # cached 302 would silently stop being tracked. See
+          # docs/architecture.md ("Click tracking and the audit trail").
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          # Custom policy (ShortUrlOriginRequestPolicy below), not the
+          # managed "AllViewer"/"AllViewerAndCloudFrontHeaders" policies -
+          # see that resource's Comment for why.
+          OriginRequestPolicyId: !Ref ShortUrlOriginRequestPolicy
+
+  # A custom, explicit whitelist rather than a managed "AllViewer"-family
+  # policy. Those forward the viewer's original Host header to the origin;
+  # API Gateway's REGIONAL endpoint validates Host against its own
+  # execute-api domain and returns 403 Forbidden for anything else - a
+  # well-known CloudFront+API-Gateway integration gotcha. Omitting Host from
+  # this whitelist lets CloudFront fall back to its default behavior
+  # (sending the origin's own domain as Host), while still forwarding
+  # everything the app actually needs, including CloudFront's
+  # viewer-geolocation headers for the click log's country/region/city
+  # fields (src/common/http/request-context.ts).
+  ShortUrlOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub 'j7website-short-url-${Environment}-origin-request'
+        Comment: 'Whitelist excludes Host deliberately - see template.yaml comment above.'
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers:
+            - Content-Type
+            - Origin
+            - Referer
+            - User-Agent
+            - Accept
+            - CloudFront-Viewer-Country
+            - CloudFront-Viewer-Country-Region-Name
+            - CloudFront-Viewer-City
+        CookiesConfig:
+          CookieBehavior: none
+        QueryStringsConfig:
+          QueryStringBehavior: all
+
+Outputs:
+  ApiBaseUrl:
+    Description: >-
+      Direct API Gateway URL (bypasses CloudFront) - useful for debugging.
+      Not what BaseUrl/shortUrl responses should use once CloudFrontUrl
+      below is verified working.
+    Value: !Sub 'https://${ShortUrlApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+
+  CloudFrontUrl:
+    Description: >-
+      CloudFront distribution's own *.cloudfront.net domain. Feed this back
+      in as the BaseUrl parameter (https://<this>) once verified working -
+      see SETUP.md. Once a custom domain is set (DomainName/AcmCertificateArn),
+      prefer CustomDomainUrl below instead - this still works either way,
+      CloudFront answers both.
+    Value: !Sub 'https://${ShortUrlDistribution.DomainName}'
+
+  CustomDomainUrl:
+    Condition: HasCustomDomain
+    Description: >-
+      Custom domain fronting CloudFront, via a DNS record managed outside
+      this stack (this template does not create Route 53 records). This is
+      what BaseUrl should be set to once verified working.
+    Value: !Sub 'https://${DomainName}'
+
+  FunctionArn:
+    Description: ARN of the Short URL Lambda function.
+    Value: !GetAtt ShortUrlFunction.Arn
+
+  FunctionName:
+    Description: Name of the Short URL Lambda function.
+    Value: !Ref ShortUrlFunction
+
+  LogGroupName:
+    Description: CloudWatch Log Group name for the Short URL function.
+    Value: !Ref ShortUrlLogGroup

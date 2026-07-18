@@ -1,0 +1,48 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ViewStackStatusAndOutputs",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents"
+      ],
+      "Resource": "arn:aws:cloudformation:ap-southeast-2:857475015624:stack/j7website-short-url-*/*"
+    },
+    {
+      "Sid": "ViewLambdaConfig",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:ListVersionsByFunction"
+      ],
+      "Resource": "arn:aws:lambda:ap-southeast-2:857475015624:function:j7website-short-url-*"
+    },
+    {
+      "Sid": "ViewLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents"
+      ],
+      "Resource": "arn:aws:logs:ap-southeast-2:857475015624:log-group:/aws/lambda/j7website-short-url-*:*"
+    },
+    {
+      "Sid": "OwnServiceSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:TagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:ap-southeast-2:857475015624:secret:j7website/short-url/*"
+    }
+  ]
+}

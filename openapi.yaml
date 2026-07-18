@@ -1,0 +1,300 @@
+openapi: 3.0.3
+info:
+  title: J7Website Short URL Service
+  description: >-
+    Phase 1 module of the J7Website platform: creates short codes, redirects
+    visitors to the original destination, and records an append-only click
+    audit trail. See docs/architecture.md for full design rationale.
+  version: '1.0'
+servers:
+  - url: http://localhost:3003
+    description: >-
+      Local dev (npm run start:dev). Matches PORT=3003 in .env - edit this
+      URL (and .env's PORT) together if your local port differs.
+  - url: https://s.jseven.ai
+    description: Deployed (dev) - custom domain, fronts CloudFront. Not live yet - see samconfig.toml.
+
+# No auth in Phase 1 - see docs/architecture.md. Explicit empty array (rather
+# than omitting `security`) documents that this is deliberate, not an
+# oversight.
+security: []
+
+tags:
+  - name: Short URL
+  - name: Health
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+
+  /short-url:
+    post:
+      tags: [Short URL]
+      summary: Create a short URL
+      operationId: createShortUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShortUrlRequest'
+            example:
+              destination: https://example.com/some/long/path?utm_source=sms
+      responses:
+        '201':
+          description: Short URL created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortUrlResponse'
+              example:
+                id: 3a9c1e4a-1234-4a1b-9abc-1234567890ab
+                code: Ab12Cd
+                shortUrl: https://s.jseven.ai/r/Ab12Cd
+        '400':
+          description: Request validation failed (e.g. destination is not a valid URL)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                error: ValidationError
+                message: Request validation failed
+                issues:
+                  - path: destination
+                    message: Invalid url
+        '500':
+          description: Ran out of short-code generation attempts (extremely rare)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: InternalError
+                message: Failed to generate a unique short code after 5 attempts
+
+  /short-url/bulk:
+    post:
+      tags: [Short URL]
+      summary: Create many short URLs in one batch
+      description: >-
+        Optimized bulk creation for campaigns (e.g. one short URL per patient
+        row from an external patient table) - one DB round trip to check
+        code uniqueness and one to insert, regardless of batch size, instead
+        of one create() call per item. Each item's destination is used
+        as-is; this endpoint does not template or derive destinations. See
+        docs/architecture.md ("Bulk short URL creation").
+      operationId: createShortUrlBulk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShortUrlBulkRequest'
+            example:
+              items:
+                - destination: https://example.com/review?patient=1
+                  createdBy: 'patient:1'
+                - destination: https://example.com/review?patient=2
+                  createdBy: 'patient:2'
+      responses:
+        '201':
+          description: All short URLs created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortUrlBulkResponse'
+              example:
+                created: 2
+                results:
+                  - destination: https://example.com/review?patient=1
+                    code: Ab12Cd
+                    shortUrl: https://s.jseven.ai/r/Ab12Cd
+                    createdBy: 'patient:1'
+                  - destination: https://example.com/review?patient=2
+                    code: Ef34Gh
+                    shortUrl: https://s.jseven.ai/r/Ef34Gh
+                    createdBy: 'patient:2'
+        '400':
+          description: >-
+            Request validation failed (e.g. an empty/oversized items array,
+            or a non-URL destination in one of the items)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              example:
+                error: ValidationError
+                message: Request validation failed
+                issues:
+                  - path: items.0.destination
+                    message: Invalid url
+        '500':
+          description: Ran out of short-code generation attempts (extremely rare)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: InternalError
+                message: Failed to generate a unique short code after 5 attempts
+
+  /r/{code}:
+    get:
+      tags: [Short URL]
+      summary: Redirect to the destination for a short code
+      description: >-
+        302-redirects to the stored destination, incrementing click_count and
+        writing one immutable row to the click-log audit trail in the same
+        transaction. No audit row is written on a 404.
+      operationId: redirectShortUrl
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+          example: Ab12Cd
+      responses:
+        '302':
+          description: Redirect to the destination
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+              description: The stored destination URL
+        '404':
+          description: No short URL exists for this code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: NotFound
+                message: Short URL with code "Ab12Cd" was not found
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+
+    CreateShortUrlRequest:
+      type: object
+      required: [destination]
+      properties:
+        destination:
+          type: string
+          format: uri
+          description: The URL to redirect to.
+
+    ShortUrlResponse:
+      type: object
+      required: [id, code, shortUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: 6-character Base62 short code.
+        shortUrl:
+          type: string
+          format: uri
+          description: '`${BASE_URL}/r/{code}`'
+
+    CreateShortUrlBulkRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          description: >-
+            Capped well under the Lambda synchronous-invocation payload
+            ceiling (6 MB) - chunk larger campaigns client-side across
+            multiple requests.
+          items:
+            type: object
+            required: [destination]
+            properties:
+              destination:
+                type: string
+                format: uri
+                description: The URL to redirect to.
+              createdBy:
+                type: string
+                maxLength: 200
+                description: >-
+                  Optional caller-supplied tag (e.g. a patient/campaign
+                  identifier) stored verbatim on the created short_urls row,
+                  for correlating this batch back to its source later.
+
+    ShortUrlBulkResponse:
+      type: object
+      required: [created, results]
+      properties:
+        created:
+          type: integer
+          description: Number of short URLs created in this batch.
+        results:
+          type: array
+          description: >-
+            One entry per input item, in the same order as the request's
+            `items` array.
+          items:
+            type: object
+            required: [destination, code, shortUrl]
+            properties:
+              destination:
+                type: string
+                format: uri
+              code:
+                type: string
+              shortUrl:
+                type: string
+                format: uri
+              createdBy:
+                type: string
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            issues:
+              type: array
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  message:
+                    type: string

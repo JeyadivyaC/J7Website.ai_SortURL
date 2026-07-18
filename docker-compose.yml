@@ -1,0 +1,26 @@
+services:
+  # Prisma's MongoDB connector requires the database to run as a replica set
+  # (even a single-node one) - it relies on retryable writes/transactions
+  # internally for every write, not just nested ones. The healthcheck below
+  # both checks AND (on first run) initiates that single-node replica set,
+  # so `docker-compose up -d` alone is enough - no manual rs.initiate() step.
+  mongodb:
+    image: mongo:7
+    container_name: j7website-short-url-mongo
+    restart: unless-stopped
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - j7website_short_url_mongodata:/data/db
+    healthcheck:
+      test: >
+        mongosh --quiet --eval
+        "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok }"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  j7website_short_url_mongodata:
