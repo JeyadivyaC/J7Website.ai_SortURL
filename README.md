@@ -106,6 +106,81 @@ MongoDB):
 }
 ```
 
+### `GET /short-url/{code}`
+
+Short URL details plus its click history - `clickCount`/`lastAccessedAt`
+(aggregate) and `clicks` (the most recent individual click-log rows, newest
+first, capped at 50).
+
+Response `200`:
+
+```json
+{
+  "id": "3a9c...uuid",
+  "code": "Ab12Cd",
+  "destination": "https://example.com/some/long/path?utm_source=sms",
+  "shortUrl": "https://api.example.com/r/Ab12Cd",
+  "clickCount": 5,
+  "createdAt": "2026-07-15T10:00:00.000Z",
+  "lastAccessedAt": "2026-07-18T11:56:51.000Z",
+  "expiresAt": null,
+  "status": "ACTIVE",
+  "clicks": [
+    {
+      "clickedAt": "2026-07-18T11:56:51.000Z",
+      "ipAddress": "203.0.113.5",
+      "userAgent": "Mozilla/5.0 ...",
+      "referer": "",
+      "country": "IN",
+      "region": "Tamil Nadu",
+      "city": "Chennai",
+      "deviceType": "desktop",
+      "browser": "Chrome",
+      "operatingSystem": "Windows",
+      "isBot": false,
+      "responseStatus": 302,
+      "redirectUrl": "https://example.com/some/long/path?utm_source=sms"
+    }
+  ]
+}
+```
+
+`404` if the code doesn't exist.
+
+### `GET /short-url/{code}/clicks`
+
+Dedicated click-detail listing for a short URL - same `ClickLogEntry` shape
+as above, but as the sole point of the response rather than embedded/capped
+at 50. Defaults to and caps at 1000 rows; narrow it with `?limit=N`.
+
+Response `200`:
+
+```json
+{
+  "code": "Ab12Cd",
+  "clickCount": 5,
+  "clicks": [
+    {
+      "clickedAt": "2026-07-18T11:56:51.000Z",
+      "ipAddress": "203.0.113.5",
+      "userAgent": "Mozilla/5.0 ...",
+      "referer": "",
+      "country": "IN",
+      "region": "Tamil Nadu",
+      "city": "Chennai",
+      "deviceType": "desktop",
+      "browser": "Chrome",
+      "operatingSystem": "Windows",
+      "isBot": false,
+      "responseStatus": 302,
+      "redirectUrl": "https://example.com/some/long/path?utm_source=sms"
+    }
+  ]
+}
+```
+
+`404` if the code doesn't exist.
+
 ### `GET /r/{code}`
 
 - `302` redirect to the stored destination; increments `click_count`,
@@ -270,7 +345,7 @@ indexes. See `.github/workflows/deploy-short-url.yml` in the platform root
 for the automated version of this step.
 
 Verify: hit the `ApiBaseUrl` CloudFormation output's `/health`, `/short-url`,
-and `/r/{code}` routes.
+`/short-url/{code}`, `/short-url/{code}/clicks`, and `/r/{code}` routes.
 
 ## CI/CD
 

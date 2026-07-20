@@ -226,6 +226,63 @@ describe('ShortUrlService', () => {
     });
   });
 
+  describe('getClicks', () => {
+    it('defaults to the max limit and returns code/clickCount/clicks, without the rest of getStats', async () => {
+      const found = createShortUrl({ clickCount: 3 });
+      const clickLog = {
+        clickedAt: new Date('2026-07-18T11:56:51.000Z'),
+        ipAddress: '203.0.113.5',
+        userAgent: 'test-agent',
+        referer: '',
+        country: null,
+        region: null,
+        city: null,
+        deviceType: 'desktop',
+        browser: 'Chrome',
+        operatingSystem: 'Windows',
+        isBot: false,
+        responseStatus: 302,
+        redirectUrl: found.destination,
+      };
+      const findByCode = jest.fn().mockResolvedValue(found);
+      const findClickLogs = jest.fn().mockResolvedValue([clickLog]);
+      const repository = createRepository({ findByCode, findClickLogs });
+      const service = new ShortUrlService(repository, config);
+
+      const result = await service.getClicks(found.code);
+
+      expect(findByCode).toHaveBeenCalledWith(found.code);
+      expect(findClickLogs).toHaveBeenCalledWith(found.code, 1000);
+      expect(result).toEqual({ code: found.code, clickCount: found.clickCount, clicks: [clickLog] });
+    });
+
+    it('clamps a caller-supplied limit to [1, 1000]', async () => {
+      const found = createShortUrl();
+      const findByCode = jest.fn().mockResolvedValue(found);
+      const findClickLogs = jest.fn().mockResolvedValue([]);
+      const repository = createRepository({ findByCode, findClickLogs });
+      const service = new ShortUrlService(repository, config);
+
+      await service.getClicks(found.code, 5000);
+      expect(findClickLogs).toHaveBeenLastCalledWith(found.code, 1000);
+
+      await service.getClicks(found.code, 0);
+      expect(findClickLogs).toHaveBeenLastCalledWith(found.code, 1);
+
+      await service.getClicks(found.code, 10);
+      expect(findClickLogs).toHaveBeenLastCalledWith(found.code, 10);
+    });
+
+    it('throws ShortUrlNotFoundError when the code does not exist, without querying click logs', async () => {
+      const findClickLogs = jest.fn();
+      const repository = createRepository({ findByCode: jest.fn().mockResolvedValue(null), findClickLogs });
+      const service = new ShortUrlService(repository, config);
+
+      await expect(service.getClicks('missing')).rejects.toThrow(ShortUrlNotFoundError);
+      expect(findClickLogs).not.toHaveBeenCalled();
+    });
+  });
+
   describe('redirect', () => {
     it('parses click metadata from the request context and records the click', async () => {
       const found = createShortUrl({ clickCount: 5 });
