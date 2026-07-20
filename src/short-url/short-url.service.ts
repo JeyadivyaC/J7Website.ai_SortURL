@@ -7,6 +7,7 @@ import { ShortUrlNotFoundError } from '../common/errors/short-url-not-found.erro
 import { parseClickMetadata } from './click-metadata';
 import { generateBase62Code } from './code-generator';
 import { ShortUrlBulkResponseDto } from './dto/short-url-bulk-response.dto';
+import { ShortUrlClicksResponseDto } from './dto/short-url-clicks-response.dto';
 import { ShortUrlResponseDto } from './dto/short-url-response.dto';
 import { ShortUrlStatsResponseDto } from './dto/short-url-stats-response.dto';
 import { SHORT_URL_REPOSITORY, ShortUrl, ShortUrlRepository } from './short-url.repository';
@@ -23,6 +24,13 @@ const MAX_CODE_GENERATION_ATTEMPTS = 5;
 // Caps the click history returned by getStats - a heavily-clicked short URL
 // could otherwise return an unbounded number of rows in one response.
 const CLICK_LOG_LIMIT = 50;
+
+// Ceiling for the dedicated getClicks endpoint - higher than CLICK_LOG_LIMIT
+// since returning click details is the whole point of that response, but
+// still bounded for the same reason as above. Also used as the default when
+// no `limit` query param is supplied, so "give me the clicks for this url"
+// returns everything up to this ceiling without callers having to know it exists.
+const MAX_CLICK_LOG_LIMIT = 1000;
 
 @Injectable()
 export class ShortUrlService {
@@ -116,6 +124,20 @@ export class ShortUrlService {
       lastAccessedAt: shortUrl.lastAccessedAt,
       expiresAt: shortUrl.expiresAt,
       status: shortUrl.status,
+      clicks,
+    };
+  }
+
+  async getClicks(code: string, limit: number = MAX_CLICK_LOG_LIMIT): Promise<ShortUrlClicksResponseDto> {
+    const shortUrl = await this.repository.findByCode(code);
+    if (!shortUrl) {
+      throw new ShortUrlNotFoundError(code);
+    }
+    const boundedLimit = Math.min(Math.max(limit, 1), MAX_CLICK_LOG_LIMIT);
+    const clicks = await this.repository.findClickLogs(code, boundedLimit);
+    return {
+      code: shortUrl.code,
+      clickCount: shortUrl.clickCount,
       clicks,
     };
   }

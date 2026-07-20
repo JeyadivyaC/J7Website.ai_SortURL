@@ -2,7 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >-
   J7Website Phase 1 - Short URL Service. A single NestJS Lambda behind API
-  Gateway handling POST /short-url, GET /r/{code}, and GET /health. Assumes an
+  Gateway handling POST /short-url, GET /short-url/{code}, GET
+  /short-url/{code}/clicks, GET /r/{code}, and GET /health. Assumes an
   existing, externally hosted MongoDB deployment (e.g. MongoDB Atlas);
   connects to it via Secrets Manager. Does not create the database.
 
@@ -248,6 +249,18 @@ Resources:
             RestApiId: !Ref ShortUrlApi
             Path: /short-url/bulk
             Method: POST
+        GetShortUrlStats:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /short-url/{code}
+            Method: GET
+        GetShortUrlClicks:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ShortUrlApi
+            Path: /short-url/{code}/clicks
+            Method: GET
         RedirectShortUrl:
           Type: Api
           Properties:

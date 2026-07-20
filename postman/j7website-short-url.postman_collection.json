@@ -54,6 +54,19 @@
       }
     },
     {
+      "name": "Get click details for a short URL",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/short-url/{{code}}/clicks",
+          "host": ["{{baseUrl}}"],
+          "path": ["short-url", "{{code}}", "clicks"],
+          "query": [{ "key": "limit", "value": "", "disabled": true, "description": "Optional. Defaults to (and capped at) 1000." }]
+        }
+      }
+    },
+    {
       "name": "Redirect (visit a short URL)",
       "request": {
         "method": "GET",

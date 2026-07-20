@@ -212,6 +212,66 @@ paths:
                 error: NotFound
                 message: Short URL with code "Ab12Cd" was not found
 
+  /short-url/{code}/clicks:
+    get:
+      tags: [Short URL]
+      summary: Get all click details for a short URL
+      description: >-
+        Dedicated click-detail listing for a short URL - one entry per past
+        redirect, newest first. Unlike /short-url/{code}'s embedded `clicks`
+        (capped at 50), this defaults to and caps at 1000 rows, and accepts an
+        optional `limit` to narrow that.
+      operationId: getShortUrlClicks
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+          example: Ab12Cd
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 1000
+          description: Maximum number of click rows to return. Clamped to [1, 1000].
+      responses:
+        '200':
+          description: Click details for the short URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShortUrlClicksResponse'
+              example:
+                code: Ab12Cd
+                clickCount: 5
+                clicks:
+                  - clickedAt: '2026-07-18T11:56:51.000Z'
+                    ipAddress: 203.0.113.5
+                    userAgent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+                    referer: ''
+                    country: IN
+                    region: Tamil Nadu
+                    city: Chennai
+                    deviceType: desktop
+                    browser: Chrome
+                    operatingSystem: Windows
+                    isBot: false
+                    responseStatus: 302
+                    redirectUrl: https://example.com/some/long/path?utm_source=sms
+        '404':
+          description: No short URL exists for this code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: NotFound
+                message: Short URL with code "Ab12Cd" was not found
+
   /r/{code}:
     get:
       tags: [Short URL]
@@ -315,6 +375,20 @@ components:
         clicks:
           type: array
           description: Most recent click-log rows, newest first, capped at 50.
+          items:
+            $ref: '#/components/schemas/ClickLogEntry'
+
+    ShortUrlClicksResponse:
+      type: object
+      required: [code, clickCount, clicks]
+      properties:
+        code:
+          type: string
+        clickCount:
+          type: integer
+        clicks:
+          type: array
+          description: Most recent click-log rows, newest first, capped at (and defaulting to) 1000.
           items:
             $ref: '#/components/schemas/ClickLogEntry'
 

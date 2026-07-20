@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Req, Res, UsePipes } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, Res, UsePipes } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { extractRequestContext } from '../common/http/request-context';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -7,6 +7,7 @@ import { CreateShortUrlBulkSchema } from './dto/create-short-url-bulk.schema';
 import { CreateShortUrlDto } from './dto/create-short-url.dto';
 import { CreateShortUrlSchema } from './dto/create-short-url.schema';
 import { ShortUrlBulkResponseDto } from './dto/short-url-bulk-response.dto';
+import { ShortUrlClicksResponseDto } from './dto/short-url-clicks-response.dto';
 import { ShortUrlResponseDto } from './dto/short-url-response.dto';
 import { ShortUrlStatsResponseDto } from './dto/short-url-stats-response.dto';
 import { ShortUrlService } from './short-url.service';
@@ -32,6 +33,15 @@ export class ShortUrlController {
   @Get('short-url/:code')
   async getStats(@Param('code') code: string): Promise<ShortUrlStatsResponseDto> {
     return this.shortUrlService.getStats(code);
+  }
+
+  @Get('short-url/:code/clicks')
+  async getClicks(
+    @Param('code') code: string,
+    @Query('limit') limit?: string,
+  ): Promise<ShortUrlClicksResponseDto> {
+    const parsedLimit = limit !== undefined && !Number.isNaN(Number(limit)) ? Number(limit) : undefined;
+    return this.shortUrlService.getClicks(code, parsedLimit);
   }
 
   @Get('r/:code')
