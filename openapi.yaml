@@ -202,6 +202,9 @@ paths:
                     isBot: false
                     responseStatus: 302
                     redirectUrl: https://example.com/some/long/path?utm_source=sms
+                    utmSource: sms
+                    utmMedium: null
+                    utmCampaign: null
         '404':
           description: No short URL exists for this code
           content:
@@ -262,6 +265,9 @@ paths:
                     isBot: false
                     responseStatus: 302
                     redirectUrl: https://example.com/some/long/path?utm_source=sms
+                    utmSource: sms
+                    utmMedium: null
+                    utmCampaign: null
         '404':
           description: No short URL exists for this code
           content:
@@ -395,7 +401,7 @@ components:
     ClickLogEntry:
       type: object
       required:
-        [clickedAt, ipAddress, userAgent, referer, country, region, city, deviceType, browser, operatingSystem, isBot, responseStatus, redirectUrl]
+        [clickedAt, ipAddress, userAgent, referer, country, region, city, deviceType, browser, operatingSystem, isBot, responseStatus, redirectUrl, utmSource, utmMedium, utmCampaign]
       properties:
         clickedAt:
           type: string
@@ -431,6 +437,18 @@ components:
           type: string
           format: uri
           description: The destination this click was redirected to (at the time of the click).
+        utmSource:
+          type: string
+          nullable: true
+          description: utm_source parsed from redirectUrl's query string, null if absent.
+        utmMedium:
+          type: string
+          nullable: true
+          description: utm_medium parsed from redirectUrl's query string, null if absent.
+        utmCampaign:
+          type: string
+          nullable: true
+          description: utm_campaign parsed from redirectUrl's query string, null if absent.
 
     CreateShortUrlBulkRequest:
       type: object

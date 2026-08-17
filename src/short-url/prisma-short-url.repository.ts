@@ -11,6 +11,7 @@ import {
   ShortUrl,
   ShortUrlRepository,
 } from './short-url.repository';
+import { parseUtmParams } from './utm-params';
 
 const PRISMA_UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 const PRISMA_RECORD_NOT_FOUND = 'P2025';
@@ -71,6 +72,7 @@ export class PrismaShortUrlRepository implements ShortUrlRepository {
             shortUrlId: updated.id,
             code,
             redirectUrl: updated.destination,
+            ...parseUtmParams(updated.destination),
             ...clickLog,
           },
         });
@@ -123,6 +125,9 @@ export class PrismaShortUrlRepository implements ShortUrlRepository {
         isBot: true,
         responseStatus: true,
         redirectUrl: true,
+        utmSource: true,
+        utmMedium: true,
+        utmCampaign: true,
       },
     });
   }

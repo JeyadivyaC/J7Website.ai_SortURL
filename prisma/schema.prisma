@@ -70,6 +70,15 @@ model ShortUrlClickLog {
   requestPath  String @map("request_path")
   queryString  String @map("query_string")
 
+  // Parsed from the resolved destination URL's own query string at click
+  // time (see parseUtmParams in utm-params.ts / recordClick in
+  // prisma-short-url.repository.ts) - not from the incoming /r/:code
+  // request's queryString above. Null when the destination carries no such
+  // param.
+  utmSource   String? @map("utm_source")
+  utmMedium   String? @map("utm_medium")
+  utmCampaign String? @map("utm_campaign")
+
   // Geo-IP is stubbed for now (always null) - see docs/architecture.md.
   // Nullable columns exist so a real resolver can be wired in later with no
   // schema change.
