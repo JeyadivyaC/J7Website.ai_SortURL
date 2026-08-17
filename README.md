@@ -139,7 +139,10 @@ Response `200`:
       "operatingSystem": "Windows",
       "isBot": false,
       "responseStatus": 302,
-      "redirectUrl": "https://example.com/some/long/path?utm_source=sms"
+      "redirectUrl": "https://example.com/some/long/path?utm_source=sms",
+      "utmSource": "sms",
+      "utmMedium": null,
+      "utmCampaign": null
     }
   ]
 }
@@ -173,7 +176,10 @@ Response `200`:
       "operatingSystem": "Windows",
       "isBot": false,
       "responseStatus": 302,
-      "redirectUrl": "https://example.com/some/long/path?utm_source=sms"
+      "redirectUrl": "https://example.com/some/long/path?utm_source=sms",
+      "utmSource": "sms",
+      "utmMedium": null,
+      "utmCampaign": null
     }
   ]
 }

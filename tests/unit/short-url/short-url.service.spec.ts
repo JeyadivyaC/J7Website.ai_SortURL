@@ -192,6 +192,9 @@ describe('ShortUrlService', () => {
         isBot: false,
         responseStatus: 302,
         redirectUrl: found.destination,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
       };
       const findByCode = jest.fn().mockResolvedValue(found);
       const findClickLogs = jest.fn().mockResolvedValue([clickLog]);
@@ -243,6 +246,9 @@ describe('ShortUrlService', () => {
         isBot: false,
         responseStatus: 302,
         redirectUrl: found.destination,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
       };
       const findByCode = jest.fn().mockResolvedValue(found);
       const findClickLogs = jest.fn().mockResolvedValue([clickLog]);

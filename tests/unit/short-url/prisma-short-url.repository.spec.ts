@@ -111,10 +111,41 @@ describe('PrismaShortUrlRepository', () => {
         data: { clickCount: { increment: 1 }, lastAccessedAt: expect.any(Date) },
       });
       expect(create).toHaveBeenCalledWith({
-        data: { shortUrlId: updated.id, code: 'abc123', redirectUrl: updated.destination, ...clickLog },
+        data: {
+          shortUrlId: updated.id,
+          code: 'abc123',
+          redirectUrl: updated.destination,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          ...clickLog,
+        },
       });
       expect(result).toBe(updated);
       expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 10_000 });
+    });
+
+    it('parses utm_source/utm_medium/utm_campaign off the resolved destination into the click log row', async () => {
+      const updated = {
+        id: '1',
+        code: 'abc123',
+        destination: 'https://www.ippobill.com/freedom/?utm_source=instagram&utm_medium=paid&utm_campaign=independence26',
+        clickCount: 1,
+      };
+      const update = jest.fn().mockResolvedValue(updated);
+      const create = jest.fn().mockResolvedValue({});
+      const prisma = createPrismaMock({ update }, { create });
+      const repository = new PrismaShortUrlRepository(prisma);
+
+      await repository.recordClick('abc123', createClickLog());
+
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          utmSource: 'instagram',
+          utmMedium: 'paid',
+          utmCampaign: 'independence26',
+        }),
+      });
     });
 
     it('rethrows unrelated Prisma errors unchanged', async () => {
@@ -171,7 +202,14 @@ describe('PrismaShortUrlRepository', () => {
         where: { code: 'abc123' },
         orderBy: { clickedAt: 'desc' },
         take: 50,
-        select: expect.objectContaining({ clickedAt: true, ipAddress: true, redirectUrl: true }),
+        select: expect.objectContaining({
+          clickedAt: true,
+          ipAddress: true,
+          redirectUrl: true,
+          utmSource: true,
+          utmMedium: true,
+          utmCampaign: true,
+        }),
       });
       expect(result).toBe(rows);
     });

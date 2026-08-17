@@ -50,7 +50,9 @@ export interface ClickLogInput {
 
 // One row per past click, as written by recordClick - see ClickLogInput for
 // what's captured at write time. redirectUrl is the resolved destination at
-// the time of that click (not necessarily today's destination).
+// the time of that click (not necessarily today's destination). utmSource/
+// utmMedium/utmCampaign are parsed from that same redirectUrl's query string
+// (see utm-params.ts), null if it carried no such param.
 export interface ClickLogRecord {
   clickedAt: Date;
   ipAddress: string;
@@ -65,6 +67,9 @@ export interface ClickLogRecord {
   isBot: boolean;
   responseStatus: number;
   redirectUrl: string;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 }
 
 // DI token for the repository interface, so ShortUrlService depends only on

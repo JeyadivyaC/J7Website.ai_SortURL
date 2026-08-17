@@ -14,6 +14,9 @@ export interface ClickLogEntryDto {
   isBot: boolean;
   responseStatus: number;
   redirectUrl: string;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 }
 
 export interface ShortUrlStatsResponseDto {
