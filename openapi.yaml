@@ -283,9 +283,12 @@ paths:
       tags: [Short URL]
       summary: Redirect to the destination for a short code
       description: >-
-        302-redirects to the stored destination, incrementing click_count and
-        writing one immutable row to the click-log audit trail in the same
-        transaction. No audit row is written on a 404.
+        302-redirects to the stored destination merged with any query string
+        on this request (request params win on conflict), incrementing
+        click_count and writing one immutable row to the click-log audit
+        trail - including utm_source/utm_medium/utm_campaign parsed off the
+        merged URL - in the same transaction. The stored destination itself
+        is never modified. No audit row is written on a 404.
       operationId: redirectShortUrl
       parameters:
         - name: code
@@ -302,7 +305,7 @@ paths:
               schema:
                 type: string
                 format: uri
-              description: The stored destination URL
+              description: The stored destination URL, merged with this request's query string
         '404':
           description: No short URL exists for this code
           content:

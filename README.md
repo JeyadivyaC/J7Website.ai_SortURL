@@ -189,12 +189,20 @@ Response `200`:
 
 ### `GET /r/{code}`
 
-- `302` redirect to the stored destination; increments `click_count`,
-  updates `last_accessed_at`, and inserts one immutable row into the
-  `short_url_click_logs` audit trail - all in a single DB transaction. See
-  `docs/architecture.md` ("Click tracking and the audit trail") for why this
-  is now a real multi-document transaction rather than the single atomic
-  update used before auditing existed.
+- `302` redirect to the stored destination, merged with any query string on
+  the incoming request (request params win on conflict) - e.g. a short URL
+  created for `https://example.com/page` redirects `/r/{code}?utm_source=fb`
+  to `https://example.com/page?utm_source=fb`. This lets one short code serve
+  many campaign/channel variants of the same destination instead of needing a
+  separate short URL per `utm_*` combination. The stored destination itself
+  is never modified - only the redirect target and click-log row for that
+  click reflect the merge. Increments `click_count`, updates
+  `last_accessed_at`, and inserts one immutable row into the
+  `short_url_click_logs` audit trail (including `utm_source`/`utm_medium`/
+  `utm_campaign` parsed off the merged URL) - all in a single DB transaction.
+  See `docs/architecture.md` ("Click tracking and the audit trail") for why
+  this is now a real multi-document transaction rather than the single
+  atomic update used before auditing existed.
 - `404` if the code doesn't exist. No click log is written for a 404 - only
   successful redirects are audited.
 
