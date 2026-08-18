@@ -11,6 +11,7 @@ import {
   ShortUrl,
   ShortUrlRepository,
 } from './short-url.repository';
+import { mergeDestinationQuery } from './query-merge';
 import { parseUtmParams } from './utm-params';
 
 const PRISMA_UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
@@ -67,17 +68,27 @@ export class PrismaShortUrlRepository implements ShortUrlRepository {
           },
         });
 
+        // The redirect target is the stored destination plus whatever query
+        // params this particular request carried (see query-merge.ts) - this
+        // is what actually gets redirected to and what utm attribution is
+        // parsed off, so one short code can serve many campaign/channel
+        // variants of the same destination. `updated.destination` itself is
+        // left untouched in the database.
+        const resolvedDestination = mergeDestinationQuery(updated.destination, clickLog.queryString);
+
         await tx.shortUrlClickLog.create({
           data: {
             shortUrlId: updated.id,
             code,
-            redirectUrl: updated.destination,
-            ...parseUtmParams(updated.destination),
+            redirectUrl: resolvedDestination,
+            ...parseUtmParams(resolvedDestination),
             ...clickLog,
           },
         });
 
-        return updated;
+        return resolvedDestination === updated.destination
+          ? updated
+          : { ...updated, destination: resolvedDestination };
       }, { timeout: RECORD_CLICK_TRANSACTION_TIMEOUT_MS });
     } catch (error) {
       if (this.isPrismaError(error, PRISMA_RECORD_NOT_FOUND)) {

@@ -86,6 +86,11 @@ export interface ShortUrlRepository {
    * short_urls row and inserts one immutable short_url_click_logs row, in a
    * single transaction. Throws ShortUrlNotFoundError if `code` doesn't
    * exist - in that case nothing is written, including no click log.
+   *
+   * The returned ShortUrl's `destination` is the stored destination merged
+   * with `clickLog.queryString` (see query-merge.ts) - the actual redirect
+   * target for this click, not necessarily the row's stored value. The
+   * stored destination itself is never modified.
    */
   recordClick(code: string, clickLog: ClickLogInput): Promise<ShortUrl>;
   /** Returns the subset of `codes` that already exist, in one round trip. */

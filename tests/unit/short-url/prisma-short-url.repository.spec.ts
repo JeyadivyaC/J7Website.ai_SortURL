@@ -155,6 +155,45 @@ describe('PrismaShortUrlRepository', () => {
 
       await expect(repository.recordClick('abc123', createClickLog())).rejects.toThrow('mock prisma error');
     });
+
+    it('merges the request query string onto the destination for the redirect target and click log', async () => {
+      const updated = { id: '1', code: 'trGWp', destination: 'https://www.ippobill.com/msme/', clickCount: 1 };
+      const update = jest.fn().mockResolvedValue(updated);
+      const create = jest.fn().mockResolvedValue({});
+      const prisma = createPrismaMock({ update }, { create });
+      const repository = new PrismaShortUrlRepository(prisma);
+      const clickLog = createClickLog({
+        queryString: 'utm_source=facebook&utm_medium=paid&utm_campaign=smallindustryday26&utm_content=feed_a',
+      });
+
+      const result = await repository.recordClick('trGWp', clickLog);
+
+      const resolvedDestination =
+        'https://www.ippobill.com/msme/?utm_source=facebook&utm_medium=paid&utm_campaign=smallindustryday26&utm_content=feed_a';
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          redirectUrl: resolvedDestination,
+          utmSource: 'facebook',
+          utmMedium: 'paid',
+          utmCampaign: 'smallindustryday26',
+        }),
+      });
+      expect(result.destination).toBe(resolvedDestination);
+      // The row's own stored destination is never mutated by the merge.
+      expect(updated.destination).toBe('https://www.ippobill.com/msme/');
+    });
+
+    it('leaves the returned destination as the same object reference when there is no incoming query string', async () => {
+      const updated = { id: '1', code: 'abc123', destination: 'https://example.com', clickCount: 1 };
+      const update = jest.fn().mockResolvedValue(updated);
+      const create = jest.fn().mockResolvedValue({});
+      const prisma = createPrismaMock({ update }, { create });
+      const repository = new PrismaShortUrlRepository(prisma);
+
+      const result = await repository.recordClick('abc123', createClickLog());
+
+      expect(result).toBe(updated);
+    });
   });
 
   describe('findByCode', () => {
